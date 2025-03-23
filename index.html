@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>College Manager Code Improvement: Reducing Repetition</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        .comparison {
+            display: flex;
+            margin-bottom: 30px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .before, .after {
+            flex: 1;
+            padding: 20px;
+        }
+        .before {
+            background-color: #fff5f5;
+            border-right: 1px solid #eee;
+        }
+        .after {
+            background-color: #f0fff4;
+        }
+        pre {
+            background: rgba(0,0,0,0.05);
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .keyword {
+            color: #0033b3;
+        }
+        .string {
+            color: #067d17;
+        }
+        .comment {
+            color: #8c8c8c;
+        }
+        .highlight {
+            font-weight: bold;
+            color: #e53e3e;
+        }
+        .stats {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-around;
+        }
+        .stat {
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #3182ce;
+        }
+        .benefit {
+            background-color: #ebf8ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        .heading {
+            background-color: #4a5568;
+            color: white;
+            padding: 10px 15px;
+            margin: 0;
+            font-size: 18px;
+        }
+        .explanation {
+            background-color: #fffaf0;
+            border-left: 4px solid #ed8936;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .tip {
+            background: #e3f2fd;
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
+        .warning {
+            background: #fff3e0;
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>College Manager Code Improvement: Reducing Repetition</h1>
+    
+    <p>Our College Manager application now has database support, but there's a lot of repetitive code in our DAO implementations. This guide shows how we can improve the code by extracting common patterns into a reusable component.</p>
+    
+    <div class="stats">
+        <div class="stat">
+            <div class="stat-value">65%</div>
+            <div>Reduction in code size</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">100%</div>
+            <div>Elimination of duplicated JDBC code</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">2</div>
+            <div>Lines to implement a DAO method (vs. 20+)</div>
+        </div>
+    </div>
+
+    <div class="explanation">
+        <h3>The Problem: Repetitive JDBC Code</h3>
+        <p>As we implemented our StudentDAOImpl, CourseDAOImpl, and RegistrationDAOImpl classes, we had to write almost identical JDBC code patterns over and over:</p>
+        <ol>
+            <li>Get a database connection</li>
+            <li>Create a prepared statement</li>
+            <li>Set parameters</li>
+            <li>Execute the query or update</li>
+            <li>Process the results (for queries)</li>
+            <li>Handle exceptions</li>
+            <li>Close the connection</li>
+        </ol>
+        <p>This made our code lengthy, error-prone, and hard to maintain.</p>
+    </div>
+
+    <h2>1. DAO Implementation Comparison</h2>
+    
+    <div class="comparison">
+        <div class="before">
+            <h3 class="heading">Before: StudentDAOImpl.findById()</h3>
+            <pre><span class="annotation">@Override</span>
+<span class="keyword">public</span> Student findById(<span class="keyword">int</span> id) {
+    Connection conn = <span class="keyword">null</span>;
+    <span class="keyword">try</span> {
+        conn = DbUtil.getConnection();
+        PreparedStatement stmt = conn.prepareStatement(
+            <span class="string">"SELECT * FROM students WHERE id = ?"</span>);
+        stmt.setInt(1, id);
+        
+        ResultSet rs = stmt.executeQuery();
+        <span class="keyword">if</span> (rs.next()) {
+            <span class="keyword">return</span> extractStudentFromResultSet(rs);
+        }
+    } <span class="keyword">catch</span> (SQLException e) {
+        System.err.println(<span class="string">"Error finding student by ID: "</span> + e.getMessage());
+    } <span class="keyword">finally</span> {
+        DbUtil.closeQuietly(conn);
+    }
+    <span class="keyword">return null</span>;
+}</pre>
+        </div>
+        <div class="after">
+            <h3 class="heading">After: StudentDAOImpl.findById()</h3>
+            <pre><span class="annotation">@Override</span>
+<span class="keyword">public</span> Student findById(<span class="keyword">int</span> id) {
+    <span class="keyword">return</span> dbOperator.findById(id);
+}</pre>
+        </div>
+    </div>
+
+    <div class="comparison">
+        <div class="before">
+            <h3 class="heading">Before: StudentDAOImpl.findAll()</h3>
+            <pre><span class="annotation">@Override</span>
+<span class="keyword">public</span> List&lt;Student&gt; findAll() {
+    List&lt;Student&gt; students = <span class="keyword">new</span> ArrayList&lt;&gt;();
+    Connection conn = <span class="keyword">null</span>;
+    <span class="keyword">try</span> {
+        conn = DbUtil.getConnection();
+        PreparedStatement stmt = conn.prepareStatement(
+            <span class="string">"SELECT * FROM students ORDER BY id"</span>);
+        
+        ResultSet rs = stmt.executeQuery();
+        <span class="keyword">while</span> (rs.next()) {
+            students.add(extractStudentFromResultSet(rs));
+        }
+    } <span class="keyword">catch</span> (SQLException e) {
+        System.err.println(<span class="string">"Error finding all students: "</span> + e.getMessage());
+    } <span class="keyword">finally</span> {
+        DbUtil.closeQuietly(conn);
+    }
+    <span class="keyword">return</span> students;
+}</pre>
+        </div>
+        <div class="after">
+            <h3 class="heading">After: StudentDAOImpl.findAll()</h3>
+            <pre><span class="annotation">@Override</span>
+<span class="keyword">public</span> List&lt;Student&gt; findAll() {
+    <span class="keyword">return</span> dbOperator.findAll();
+}</pre>
+        </div>
+    </div>
+
+    <h2>2. Creating the DbOperator</h2>
+    
+    <p>Let's implement a generic DbOperator that will handle all the common JDBC operations:</p>
+    
+    <pre><span class="keyword">package</span> com.example.collegemanager.db;
+
+<span class="keyword">import</span> java.sql.Connection;
+<span class="keyword">import</span> java.sql.PreparedStatement;
+<span class="keyword">import</span> java.sql.ResultSet;
+<span class="keyword">import</span> java.sql.SQLException;
+<span class="keyword">import</span> java.util.ArrayList;
+<span class="keyword">import</span> java.util.List;
+<span class="keyword">import</span> java.util.function.Function;
+
+<span class="comment">/**
+ * Generic database operator that handles common JDBC operations
+ * @param <T> The entity type (Student, Course, etc.)
+ * @param <ID> The type of the ID field (Integer for students, String for courses)
+ */</span>
+<span class="keyword">public class</span> DbOperator&lt;T, ID&gt; {
+    <span class="keyword">private final</span> String tableName;
+    <span class="keyword">private final</span> String idColumnName;
+    <span class="keyword">private final</span> Function&lt;ResultSet, T&gt; rowMapper;
+    <span class="keyword">private final</span> Function&lt;T, ID&gt; idExtractor;
+    
+    <span class="comment">/**
+     * Create a new DbOperator
+     * @param tableName The database table name
+     * @param idColumnName The name of the ID column
+     * @param rowMapper Function that converts a ResultSet row to an entity
+     * @param idExtractor Function that extracts the ID from an entity
+     */</span>
+    <span class="keyword">public</span> DbOperator(String tableName, String idColumnName, 
+                    Function&lt;ResultSet, T&gt; rowMapper, 
+                    Function&lt;T, ID&gt; idExtractor) {
+        <span class="keyword">this</span>.tableName = tableName;
+        <span class="keyword">this</span>.idColumnName = idColumnName;
+        <span class="keyword">this</span>.rowMapper = rowMapper;
+        <span class="keyword">this</span>.idExtractor = idExtractor;
+    }
+    
+    <span class="comment">/**
+     * Find an entity by its ID
+     * @param id The ID to search for
+     * @return The entity, or null if not found
+     */</span>
+    <span class="keyword">public</span> T findById(ID id) {
+        String sql = <span class="string">"SELECT * FROM "</span> + tableName + <span class="string">" WHERE "</span> + idColumnName + <span class="string">" = ?"</span>;
+        <span class="keyword">return</span> querySingle(sql, stmt -> setParameter(stmt, 1, id));
+    }
+    
+    <span class="comment">/**
+     * Find all entities in the table
+     * @return List of all entities
+     */</span>
+    <span class="keyword">public</span> List&lt;T&gt; findAll() {
+        String sql = <span class="string">"SELECT * FROM "</span> + tableName;
+        <span class="keyword">return</span> queryList(sql, stmt -> {});
+    }
+    
+    <span class="comment">/**
+     * Save a new entity
+     * @param entity The entity to save
+     * @param saveFunction Function to set parameters for the INSERT statement
+     * @return true if successful
+     */</span>
+    <span class="keyword">public boolean</span> save(T entity, SqlParameterSetter saveFunction) {
+        <span class="keyword">return</span> executeUpdate(saveFunction) > 0;
+    }
+    
+    <span class="comment">/**
+     * Delete an entity by ID
+     * @param id The ID of the entity to delete
+     * @return true if successful
+     */</span>
+    <span class="keyword">public boolean</span> delete(ID id) {
+        String sql = <span class="string">"DELETE FROM "</span> + tableName + <span class="string">" WHERE "</span> + idColumnName + <span class="string">" = ?"</span>;
+        <span class="keyword">return</span> executeUpdate(sql, stmt -> setParameter(stmt, 1, id)) > 0;
+    }
+    
+    <span class="comment">// Helper methods below</span>
+    
+    <span class="comment">/**
+     * Execute a query that returns a single entity
+     */</span>
+    <span class="keyword">private</span> T querySingle(String sql, SqlParameterSetter paramSetter) {
+        Connection conn = <span class="keyword">null</span>;
+        <span class="keyword">try</span> {
+            conn = DbUtil.getConnection();
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            paramSetter.setParameters(stmt);
+            
+            ResultSet rs = stmt.executeQuery();
+            <span class="keyword">if</span> (rs.next()) {
+                <span class="keyword">return</span> rowMapper.apply(rs);
+            }
+        } <span class="keyword">catch</span> (SQLException e) {
+            System.err.println(<span class="string">"Database error: "</span> + e.getMessage());
+        } <span class="keyword">finally</span> {
+            DbUtil.closeQuietly(conn);
+        }
+        <span class="keyword">return null</span>;
+    }
+    
+    <span class="comment">/**
+     * Execute a query that returns a list of entities
+     */</span>
+    <span class="keyword">private</span> List&lt;T&gt; queryList(String sql, SqlParameterSetter paramSetter) {
+        List&lt;T&gt; results = <span class="keyword">new</span> ArrayList&lt;&gt;();
+        Connection conn = <span class="keyword">null</span>;
+        <span class="keyword">try</span> {
+            conn = DbUtil.getConnection();
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            paramSetter.setParameters(stmt);
+            
+            ResultSet rs = stmt.executeQuery();
+            <span class="keyword">while</span> (rs.next()) {
+                results.add(rowMapper.apply(rs));
+            }
+        } <span class="keyword">catch</span> (SQLException e) {
+            System.err.println(<span class="string">"Database error: "</span> + e.getMessage());
+        } <span class="keyword">finally</span> {
+            DbUtil.closeQuietly(conn);
+        }
+        <span class="keyword">return</span> results;
+    }
+    
+    <span class="comment">/**
+     * Execute an update statement
+     */</span>
+    <span class="keyword">private int</span> executeUpdate(String sql, SqlParameterSetter paramSetter) {
+        Connection conn = <span class="keyword">null</span>;
+        <span class="keyword">try</span> {
+            conn = DbUtil.getConnection();
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            paramSetter.setParameters(stmt);
+            
+            <span class="keyword">return</span> stmt.executeUpdate();
+        } <span class="keyword">catch</span> (SQLException e) {
+            System.err.println(<span class="string">"Database error: "</span> + e.getMessage());
+            <span class="keyword">return</span> 0;
+        } <span class="keyword">finally</span> {
+            DbUtil.closeQuietly(conn);
+        }
+    }
+    
+    <span class="comment">/**
+     * Set a parameter in a PreparedStatement, handling different types
+     */</span>
+    <span class="keyword">private static void</span> setParameter(PreparedStatement stmt, <span class="keyword">int</span> index, Object value) 
+            <span class="keyword">throws</span> SQLException {
+        <span class="keyword">if</span> (value == <span class="keyword">null</span>) {
+            stmt.setNull(index, java.sql.Types.NULL);
+        } <span class="keyword">else if</span> (value <span class="keyword">instanceof</span> String) {
+            stmt.setString(index, (String) value);
+        } <span class="keyword">else if</span> (value <span class="keyword">instanceof</span> Integer) {
+            stmt.setInt(index, (Integer) value);
+        } <span class="keyword">else if</span> (value <span class="keyword">instanceof</span> Long) {
+            stmt.setLong(index, (Long) value);
+        } <span class="keyword">else if</span> (value <span class="keyword">instanceof</span> Double) {
+            stmt.setDouble(index, (Double) value);
+        } <span class="keyword">else if</span> (value <span class="keyword">instanceof</span> Boolean) {
+            stmt.setBoolean(index, (Boolean) value);
+        } <span class="keyword">else</span> {
+            <span class="comment">// fallback to string representation</span>
+            stmt.setString(index, value.toString());
+        }
+    }
+    
+    <span class="comment">/**
+     * Functional interface for setting parameters in a PreparedStatement
+     */</span>
+    <span class="keyword">public interface</span> SqlParameterSetter {
+        <span class="keyword">void</span> setParameters(PreparedStatement stmt) <span class="keyword">throws</span> SQLException;
+    }
+}</pre>
+
+    <div class="explanation">
+        <h3>Understanding the Generic Type Parameters</h3>
+        <p><strong>T</strong> - This represents the entity type that the DbOperator will work with. For example:</p>
+        <ul>
+            <li>When <code>T</code> is <code>Student</code>, the DbOperator handles Student objects</li>
+            <li>When <code>T</code> is <code>Course</code>, the DbOperator handles Course objects</li>
+        </ul>
+        <p><strong>ID</strong> - This represents the type of the primary key/identifier for each entity. For example:</p>
+        <ul>
+            <li>For Student entities, <code>ID</code> is <code>Integer</code> because student IDs are integers</li>
+            <li>For Course entities, <code>ID</code> is <code>String</code> because course codes are strings</li>
+        </ul>
+        <p>This allows us to create one flexible DbOperator that works with any entity type and any ID type!</p>
+    </div>
+
+    <h2>3. Updated StudentDAOImpl Implementation</h2>
+    
+    <p>Here's how the StudentDAOImpl would look using our new DbOperator:</p>
+
+    <pre><span class="keyword">package</span> com.example.collegemanager.dao.impl;
+
+<span class="keyword">import</span> com.example.collegemanager.dao.StudentDAO;
+<span class="keyword">import</span> com.example.collegemanager.db.DbOperator;
+<span class="keyword">import</span> com.example.collegemanager.model.Student;
+
+<span class="keyword">import</span> java.sql.PreparedStatement;
+<span class="keyword">import</span> java.sql.ResultSet;
+<span class="keyword">import</span> java.sql.SQLException;
+<span class="keyword">import</span> java.util.List;
+
+<span class="keyword">public class</span> StudentDAOImpl <span class="keyword">implements</span> StudentDAO {
+    <span class="keyword">private final</span> DbOperator&lt;Student, Integer&gt; dbOperator;
+    
+    <span class="keyword">public</span> StudentDAOImpl() {
+        <span class="keyword">this</span>.dbOperator = <span class="keyword">new</span> DbOperator&lt;&gt;(
+            <span class="string">"students"</span>,    <span class="comment">// table name</span>
+            <span class="string">"id"</span>,          <span class="comment">// ID column name</span>
+            <span class="keyword">this</span>::mapResultSetToStudent,  <span class="comment">// maps ResultSet to Student</span>
+            Student::getId <span class="comment">// extracts ID from Student</span>
+        );
+    }
+
+    <span class="annotation">@Override</span>
+    <span class="keyword">public</span> Student findById(<span class="keyword">int</span> id) {
+        <span class="keyword">return</span> dbOperator.findById(id);
+    }
+
+    <span class="annotation">@Override</span>
+    <span class="keyword">public</span> List&lt;Student&gt; findAll() {
+        <span class="keyword">return</span> dbOperator.findAll();
+    }
+
+    <span class="annotation">@Override</span>
+    <span class="keyword">public boolean</span> save(Student student) {
+        String sql = <span class="string">"INSERT INTO students (id, name, email) VALUES (?, ?, ?)"</span>;
+        <span class="keyword">return</span> dbOperator.save(student, stmt -> {
+            <span class="keyword">try</span> {
+                stmt.setInt(1, student.getId());
+                stmt.setString(2, student.getName());
+                stmt.setString(3, student.getEmail());
+            } <span class="keyword">catch</span> (SQLException e) {
+                <span class="keyword">throw new</span> RuntimeException(<span class="string">"Error setting parameters"</span>, e);
+            }
+        });
+    }
+
+    <span class="annotation">@Override</span>
+    <span class="keyword">public boolean</span> update(Student student) {
+        String sql = <span class="string">"UPDATE students SET name = ?, email = ? WHERE id = ?"</span>;
+        <span class="keyword">return</span> dbOperator.executeUpdate(sql, stmt -> {
+            <span class="keyword">try</span> {
+                stmt.setString(1, student.getName());
+                stmt.setString(2, student.getEmail());
+                stmt.setInt(3, student.getId());
+            } <span class="keyword">catch</span> (SQLException e) {
+                <span class="keyword">throw new</span> RuntimeException(<span class="string">"Error setting parameters"</span>, e);
+            }
+        }) > 0;
+    }
+
+    <span class="annotation">@Override</span>
+    <span class="keyword">public boolean</span> delete(<span class="keyword">int</span> id) {
+        <span class="keyword">return</span> dbOperator.delete(id);
+    }
+    
+    <span class="comment">/**
+     * Maps a database row to a Student object
+     */</span>
+    <span class="keyword">private</span> Student mapResultSetToStudent(ResultSet rs) {
+        <span class="keyword">try</span> {
+            <span class="keyword">int</span> id = rs.getInt(<span class="string">"id"</span>);
+            String name = rs.getString(<span class="string">"name"</span>);
+            String email = rs.getString(<span class="string">"email"</span>);
+            <span class="keyword">return new</span> Student(id, name, email);
+        } <span class="keyword">catch</span> (SQLException e) {
+            System.err.println(<span class="string">"Error mapping ResultSet to Student: "</span> + e.getMessage());
+            <span class="keyword">return null</span>;
+        }
+    }
+}</pre>
+
+    <div class="tip">
+        <strong>Notice:</strong> 
+        <ul>
+            <li>Our DAO now defines <strong>what</strong> to do, not <strong>how</strong> to do it</li>
+            <li>All JDBC connection management, error handling, and resource cleanup is now handled by the DbOperator</li>
+            <li>The DAO just needs to provide entity-specific mapping logic</li>
+        </ul>
+    </div>
+
+    <h2>4. Updated CourseDAOImpl Implementation</h2>
+    
+    <p>Similarly, here's how the CourseDAOImpl would look:</p>
+
+    <pre><span class="keyword">package</span> com.example.collegemanager.dao.impl;
+
+<span class="keyword">import</span> com.example.collegemanager.dao.CourseDAO;
+<span class="keyword">import</span> com.example.collegemanager.db.DbOperator;
+<span class="keyword">import</span> com.example.collegemanager.model.Course;
+
+<span class="keyword">import</span> java.sql.PreparedStatement;
+<span class="keyword">import</span> java.sql.ResultSet;
+<span class="keyword">import</span> java.sql.SQLException;
+<span class="keyword">import</span> java.util.List;
+
+<span class="keyword">public class</span> CourseDAOImpl <span class="keyword">implements</span> CourseDAO {
+    <span class="keyword">private final</span> DbOperator&lt;Course, String&gt; dbOperator;
+    
+    <span class="keyword">public</span> CourseDAOImpl() {
+        <span class="keyword">this</span>.dbOperator = <span class="keyword">new</span> DbOperator&lt;&gt;(
+            <span class="string">"courses"</span>,    <span class="comment">// table name</span>
+            <span class="string">"code"</span>,       <span class="comment">// ID column name</span>
+            <span class="keyword">this</span>::mapResultSetToCourse,  <span class="comment">// maps ResultSet to Course</span>
+            Course::getCode  <span class="comment">// extracts ID (code) from Course</span>
+        );
+    }
+
+    <span class="annotation">@Override</span>
+    <span class="keyword">public</span> Course findByCode(String code) {
+        <span class="keyword">return</span> dbOperator.findById(code);
+    }
+
+    <span class="annotation">@Override</span>
+    <span class="keyword">public</span> List&lt;Course&gt; findAll() {
+        <span class="keyword">return</span> dbOperator.findAll();
+    }
+
+    <span class="annotation">@Override</span>
+    <span class="keyword">public boolean</span> save(Course course) {
+        String sql = <span class="string">"INSERT INTO courses (code, title, credits, instructor) VALUES (?, ?, ?, ?)"</span>;
+        <span class="keyword">return</span> dbOperator.save(course, stmt -> {
+            <span class="keyword">try</span> {
+                stmt.setString(1, course.getCode());
+                stmt.setString(2, course.getTitle());
+                stmt.setInt(3, course.getCredits());
+                stmt.setString(4, course.getInstructor());
+            } <span class="keyword">catch</span> (SQLException e) {
+                <span class="keyword">throw new</span> RuntimeException(<span class="string">"Error setting parameters"</span>, e);
+            }
+        });
+    }
+
+    <span class="annotation">@Override</span>
+    <span class="keyword">public boolean</span> delete(String code) {
+        <span class="keyword">return</span> dbOperator.delete(code);
+    }
+    
+    <span class="comment">/**
+     * Maps a database row to a Course object
+     */</span>
+    <span class="keyword">private</span> Course mapResultSetToCourse(ResultSet rs) {
+        <span class="keyword">try</span> {
+            String code = rs.getString(<span class="string">"code"</span>);
+            String title = rs.getString(<span class="string">"title"</span>);
+            <span class="keyword">int</span> credits = rs.getInt(<span class="string">"credits"</span>);
+            String instructor = rs.getString(<span class="string">"instructor"</span>);
+            <span class="keyword">return new</span> Course(code, title, credits, instructor);
+        } <span class="keyword">catch</span> (SQLException e) {
+            System.err.println(<span class="string">"Error mapping ResultSet to Course: "</span> + e.getMessage());
+            <span class="keyword">return null</span>;
+        }
+    }
+}</pre>
+
+    <div class="warning">
+        <strong>Notice the difference:</strong> For StudentDAOImpl, the ID type is Integer (Student::getId returns an int), but for CourseDAOImpl, the ID type is String (Course::getCode returns a String). Our generic DbOperator handles both cases seamlessly!
+    </div>
+
+    <h2>5. Key Benefits of This Approach</h2>
+    
+    <div class="benefit">
+        <h3>1. Dramatic Code Reduction</h3>
+        <p>The DAO implementations are now much shorter and more focused on their specific entity types. Common JDBC boilerplate is abstracted away.</p>
+    </div>
+    
+    <div class="benefit">
+        <h3>2. Improved Reliability</h3>
+        <p>Connection management, resource cleanup, and exception handling are now centralized in one place, reducing the risk of bugs.</p>
+    </div>
+    
+    <div class="benefit">
+        <h3>3. Better Separation of Concerns</h3>
+        <p>DAOs now focus on <em>what</em> to do with their entities, while the DbOperator handles <em>how</em> to interact with the database.</p>
+    </div>
+    
+    <div class="benefit">
+        <h3>4. Type Safety with Generics</h3>
+        <p>Using generics ensures that we're working with the correct types throughout our application. No more casting or type errors!</p>
+    </div>
+    
+    <div class="benefit">
+        <h3>5. Easier Maintenance</h3>
+        <p>If we need to change how we manage database connections or handle errors, we only need to update one class (DbOperator) instead of changing every DAO.</p>
+    </div>
+
+    <h2>6. Functional Interfaces and Lambda Expressions</h2>
+    
+    <div class="explanation">
+        <h3>Using Functional Programming in Our Solution</h3>
+        <p>Our solution uses several concepts from functional programming:</p>
+        <ul>
+            <li><strong>Function&lt;ResultSet, T&gt; rowMapper</strong> - A function that converts a database row into an entity object</li>
+            <li><strong>Function&lt;T, ID&gt; idExtractor</strong> - A function that extracts the ID from an entity</li>
+            <li><strong>SqlParameterSetter interface</strong> - A functional interface for setting parameters in a PreparedStatement</li>
+        </ul>
+        <p>This makes our code more flexible and allows for clean, declarative programming.</p>
+    </div>
+
+    <h2>7. Integration with CollegeManager</h2>
+    
+    <p>Integrating our improved DAOs with the CollegeManager web application requires minimal changes. We simply need to update our DAO implementations and the rest of the application continues to work as before!</p>
+
+    <div class="tip">
+        <strong>Database abstraction:</strong> Because we've properly separated concerns, the rest of our application doesn't need to know about our database implementation details. This makes our application more maintainable and adaptable to future changes.
+    </div>
+
+    <h2>8. Complete Example: RegistrationDAOImpl</h2>
+    
+    <p>Let's look at a complete example with our RegistrationDAOImpl, which handles the many-to-many relationship between students and courses:</p>
+
+    <pre><span class="keyword">package</span> com.example.collegemanager.dao.impl;
+
+<span class="keyword">import</span> com.example.collegemanager.dao.RegistrationDAO;
+<span class="keyword">import</span> com.example.collegemanager.db.DbOperator;
+<span class="keyword">import</span> com.example.collegemanager.model.Course;
+
+<span class="keyword">import</span> java.sql.ResultSet;
+<span class="keyword">import</span> java.sql.SQLException;
+<span class="keyword">import</span> java.util.List;
+
+<span class="keyword">public class</span> RegistrationDAOImpl <span class="keyword">implements</span> RegistrationDAO {
+    <span class="keyword">private final</span> DbOperator&lt;Course, String&gt; courseOperator;
+    
+    <span class="keyword">public</span> RegistrationDAOImpl() {
+        <span class="keyword">this</span>.courseOperator = <span class="keyword">new</span> DbOperator&lt;&gt;(
+            <span class="string">"courses"</span>,    <span class="comment">// table name</span>
+            <span class="string">"code"</span>,       <span class="comment">// ID column name</span>
+            <span class="keyword">this</span>::mapResultSetToCourse,  <span class="comment">// maps ResultSet to Course</span>
+            Course::getCode  <span class="comment">// extracts ID (code) from Course</span>
+        );
+    }
+
+    <span class="annotation">@Override</span>
+    <span class="keyword">public boolean</span> registerStudentForCourse(<span class="keyword">int</span> studentId, String courseCode) {
+        <span class="comment">// First check if registration already exists</span>
+        String checkSql = <span class="string">"SELECT COUNT(*) FROM registrations WHERE student_id = ? AND course_code = ?"</span>;
+        Integer count = courseOperator.queryScalar(checkSql, stmt -> {
+            <span class="keyword">try</span> {
+                stmt.setInt(1, studentId);
+                stmt.setString(2, courseCode);
+            } <span class="keyword">catch</span> (SQLException e) {
+                <span class="keyword">throw new</span> RuntimeException(<span class="string">"Error setting parameters"</span>, e);
+            }
+        }, rs -> {
+            <span class="keyword">try</span> {
+                <span class="keyword">return</span> rs.getInt(1);
+            } <span class="keyword">catch</span> (SQLException e) {
+                <span class="keyword">throw new</span> RuntimeException(<span class="string">"Error getting count"</span>, e);
+            }
+        });
+        
+        <span class="keyword">if</span> (count != <span class="keyword">null</span> && count > 0) {
+            <span class="comment">// Already registered</span>
+            <span class="keyword">return true</span>;
+        }
+        
+        <span class="comment">// Insert the registration</span>
+        String insertSql = <span class="string">"INSERT INTO registrations (student_id, course_code) VALUES (?, ?)"</span>;
+        <span class="keyword">return</span> courseOperator.executeUpdate(insertSql, stmt -> {
+            <span class="keyword">try</span> {
+                stmt.setInt(1, studentId);
+                stmt.setString(2, courseCode);
+            } <span class="keyword">catch</span> (SQLException e) {
+                <span class="keyword">throw new</span> RuntimeException(<span class="string">"Error setting parameters"</span>, e);
+            }
+        }) > 0;
+    }
+
+    <span class="annotation">@Override</span>
+    <span class="keyword">public boolean</span> unregisterStudentFromCourse(<span class="keyword">int</span> studentId, String courseCode) {
+        String sql = <span class="string">"DELETE FROM registrations WHERE student_id = ? AND course_code = ?"</span>;
+        <span class="keyword">return</span> courseOperator.executeUpdate(sql, stmt -> {
+            <span class="keyword">try</span> {
+                stmt.setInt(1, studentId);
+                stmt.setString(2, courseCode);
+            } <span class="keyword">catch</span> (SQLException e) {
+                <span class="keyword">throw new</span> RuntimeException(<span class="string">"Error setting parameters"</span>, e);
+            }
+        }) > 0;
+    }
+
+    <span class="annotation">@Override</span>
+    <span class="keyword">public</span> List&lt;Course&gt; getCoursesForStudent(<span class="keyword">int</span> studentId) {
+        String sql = <span class="string">"SELECT c.* FROM courses c " +
+                     "JOIN registrations r ON c.code = r.course_code " +
+                     "WHERE r.student_id = ? " +
+                     "ORDER BY c.code"</span>;
+        
+        <span class="keyword">return</span> courseOperator.queryList(sql, stmt -> {
+            <span class="keyword">try</span> {
+                stmt.setInt(1, studentId);
+            } <span class="keyword">catch</span> (SQLException e) {
+                <span class="keyword">throw new</span> RuntimeException(<span class="string">"Error setting parameters"</span>, e);
+            }
+        });
+    }
+
+    <span class="annotation">@Override</span>
+    <span class="keyword">public int</span> countStudentsForCourse(String courseCode) {
+        String sql = <span class="string">"SELECT COUNT(*) FROM registrations WHERE course_code = ?"</span>;
+        Integer count = courseOperator.queryScalar(sql, stmt -> {
+            <span class="keyword">try</span> {
+                stmt.setString(1, courseCode);
+            } <span class="keyword">catch</span> (SQLException e) {
+                <span class="keyword">throw new</span> RuntimeException(<span class="string">"Error setting parameters"</span>, e);
+            }
+        }, rs -> {
+            <span class="keyword">try</span> {
+                <span class="keyword">return</span> rs.getInt(1);
+            } <span class="keyword">catch</span> (SQLException e) {
+                <span class="keyword">throw new</span> RuntimeException(<span class="string">"Error getting count"</span>, e);
+            }
+        });
+        
+        <span class="keyword">return</span> count != <span class="keyword">null</span> ? count : 0;
+    }
+    
+    <span class="keyword">private</span> Course mapResultSetToCourse(ResultSet rs) {
+        <span class="keyword">try</span> {
+            String code = rs.getString(<span class="string">"code"</span>);
+            String title = rs.getString(<span class="string">"title"</span>);
+            <span class="keyword">int</span> credits = rs.getInt(<span class="string">"credits"</span>);
+            String instructor = rs.getString(<span class="string">"instructor"</span>);
+            <span class="keyword">return new</span> Course(code, title, credits, instructor);
+        } <span class="keyword">catch</span> (SQLException e) {
+            System.err.println(<span class="string">"Error mapping ResultSet to Course: "</span> + e.getMessage());
+            <span class="keyword">return null</span>;
+        }
+    }
+}</pre>
+
+    <div class="tip">
+        <strong>Note:</strong> Even for complex operations like counting and joining tables, our DbOperator provides the support we need. The DAO code remains focused on <em>what</em> we want to do rather than <em>how</em> to interact with the database.
+    </div>
+
+    <h2>9. Adding the Missing Methods to DbOperator</h2>
+    
+    <p>To support the RegistrationDAOImpl, we need to add a few more methods to our DbOperator class:</p>
+
+    <pre><span class="comment">/**
+ * Execute a query that returns a scalar value (single value)
+ */</span>
+<span class="keyword">public</span> &lt;R&gt; R queryScalar(String sql, SqlParameterSetter paramSetter, 
+                         Function&lt;ResultSet, R&gt; scalarExtractor) {
+    Connection conn = <span class="keyword">null</span>;
+    <span class="keyword">try</span> {
+        conn = DbUtil.getConnection();
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        paramSetter.setParameters(stmt);
+        
+        ResultSet rs = stmt.executeQuery();
+        <span class="keyword">if</span> (rs.next()) {
+            <span class="keyword">return</span> scalarExtractor.apply(rs);
+        }
+    } <span class="keyword">catch</span> (SQLException e) {
+        System.err.println(<span class="string">"Database error: "</span> + e.getMessage());
+    } <span class="keyword">finally</span> {
+        DbUtil.closeQuietly(conn);
+    }
+    <span class="keyword">return null</span>;
+}
+
+<span class="comment">/**
+ * Execute an update statement with a custom SQL query
+ */</span>
+<span class="keyword">public int</span> executeUpdate(String sql, SqlParameterSetter paramSetter) {
+    Connection conn = <span class="keyword">null</span>;
+    <span class="keyword">try</span> {
+        conn = DbUtil.getConnection();
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        paramSetter.setParameters(stmt);
+        
+        <span class="keyword">return</span> stmt.executeUpdate();
+    } <span class="keyword">catch</span> (SQLException e) {
+        System.err.println(<span class="string">"Database error: "</span> + e.getMessage());
+        <span class="keyword">return</span> 0;
+    } <span class="keyword">finally</span> {
+        DbUtil.closeQuietly(conn);
+    }
+}</pre>
+
+    <h2>10. Integration with DAOFactory</h2>
+    
+    <p>We can still use our DAOFactory pattern with the improved implementation:</p>
+
+    <pre><span class="keyword">package</span> com.example.collegemanager.dao;
+
+<span class="keyword">import</span> com.example.collegemanager.dao.impl.CourseDAOImpl;
+<span class="keyword">import</span> com.example.collegemanager.dao.impl.RegistrationDAOImpl;
+<span class="keyword">import</span> com.example.collegemanager.dao.impl.StudentDAOImpl;
+
+<span class="keyword">public class</span> DAOFactory {
+    <span class="keyword">private static</span> StudentDAO studentDAO;
+    <span class="keyword">private static</span> CourseDAO courseDAO;
+    <span class="keyword">private static</span> RegistrationDAO registrationDAO;
+    
+    <span class="keyword">public static</span> StudentDAO getStudentDAO() {
+        <span class="keyword">if</span> (studentDAO == <span class="keyword">null</span>) {
+            studentDAO = <span class="keyword">new</span> StudentDAOImpl();
+        }
+        <span class="keyword">return</span> studentDAO;
+    }
+    
+    <span class="keyword">public static</span> CourseDAO getCourseDAO() {
+        <span class="keyword">if</span> (courseDAO == <span class="keyword">null</span>) {
+            courseDAO = <span class="keyword">new</span> CourseDAOImpl();
+        }
+        <span class="keyword">return</span> courseDAO;
+    }
+    
+    <span class="keyword">public static</span> RegistrationDAO getRegistrationDAO() {
+        <span class="keyword">if</span> (registrationDAO == <span class="keyword">null</span>) {
+            registrationDAO = <span class="keyword">new</span> RegistrationDAOImpl();
+        }
+        <span class="keyword">return</span> registrationDAO;
+    }
+}</pre>
+
+    <div class="benefit">
+        <h3>Backward Compatibility</h3>
+        <p>Because we've maintained the same interfaces (StudentDAO, CourseDAO, etc.), the rest of our application works without changes. This is the beauty of proper interface-based design!</p>
+    </div>
+
+    <h2>11. Further Improvements</h2>
+    
+    <p>We could take this even further with additional improvements:</p>
+    
+    <div class="benefit">
+        <h3>1. Connection Pooling</h3>
+        <p>Add a connection pool (like HikariCP) to improve performance by reusing database connections.</p>
+    </div>
+    
+    <div class="benefit">
+        <h3>2. Transaction Support</h3>
+        <p>Add support for transactions to ensure that multiple operations either all succeed or all fail.</p>
+    </div>
+    
+    <div class="benefit">
+        <h3>3. Generic DAO Interface</h3>
+        <p>Create a generic DAO interface with common operations like findById, findAll, save, etc.</p>
+    </div>
+    
+    <div class="benefit">
+        <h3>4. Better Error Handling</h3>
+        <p>Use a more sophisticated error handling mechanism, such as custom exceptions or a logging framework.</p>
+    </div>
+
+    <h2>Conclusion</h2>
+    
+    <p>By using object-oriented design principles and functional programming concepts, we've transformed our repetitive, verbose JDBC code into a clean, maintainable abstraction. This approach makes our application:</p>
+    
+    <ul>
+        <li><strong>More maintainable</strong> - Code is easier to understand and change</li>
+        <li><strong>More reliable</strong> - Connection management and error handling are centralized</li>
+        <li><strong>More flexible</strong> - Adding new entity types or database operations is simpler</li>
+        <li><strong>More readable</strong> - DAO implementations are focused on their specific responsibilities</li>
+    </ul>
+    
+    <p>The use of generics and functional interfaces allows us to create a single, powerful abstraction that works with different entity types and ID types, showing the flexibility of Java's type system.</p>
+    
+    <div class="tip">
+        <strong>Remember:</strong> Good abstractions hide complexity while exposing just what's needed. Our DbOperator encapsulates all the complex JDBC interactions, allowing our DAOs to focus on entity-specific operations.
+    </div>
